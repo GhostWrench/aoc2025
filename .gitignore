@@ -1,0 +1,8 @@
+# Data directory
+data/
+
+# Build output
+output/
+
+# Debug logs
+*.log
