@@ -74,8 +74,14 @@ int get_code_0x434C49434B(const std::vector<int>& turns, int start) {
 
 int main(int argc, char **argv) {
 
+    // Check inputs
+    if (argc != 2) {
+        std::cout << "Input filename must be provided" << std::endl;
+        return EXIT_FAILURE;
+    }
+
     // Read the input file
-    std::vector turns = read_input("data/day1/input.dat");
+    std::vector turns = read_input(argv[1]);
 
     // Add up the turns
     int safe_code = get_code(turns, 50);
@@ -83,7 +89,7 @@ int main(int argc, char **argv) {
 
     // Print results
     std::cout << "Safe Code: " << safe_code << std::endl;
-    std::cout << "Safe Code Updated: " << safe_code_0x434C49434B << std::endl;
+    std::cout << "Safe Code 0x434C49434B: " << safe_code_0x434C49434B << std::endl;
 
     return EXIT_SUCCESS;
 
