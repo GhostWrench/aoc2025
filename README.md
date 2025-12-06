@@ -7,4 +7,5 @@ This repo has my attempts at AOC for 2025. Fee free to look through the code and
 | Day | Part 1 | Part 2 | CPU Time |
 | --- | ------ | ------ | -------- |
 | 1   | :star: | :star: | 0m0.003s |
-| 2   | :star: |        |          |
+| 2   | :star: | :star: | 0m0.212s |
+| 3   |        |        |          |

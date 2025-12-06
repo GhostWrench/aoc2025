@@ -2,6 +2,7 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -94,6 +95,74 @@ u_int64_t sum_invalid_ids(const std::vector<std::array<std::string, 2>>& ranges)
     return grand_sum;
 }
 
+u_int64_t sum_invalid_ids_2(const std::vector<std::array<std::string, 2>>& ranges) {
+    u_int64_t grand_sum = 0;
+    for (const std::array<std::string, 2>& range: ranges) {
+
+        // Get the full min and max values of the range
+        u_int64_t full_min = std::stoull(range[0]);
+        u_int64_t full_max = std::stoull(range[1]);
+
+#ifdef DEBUG
+        std::cout << full_min << "-" << full_max << std::endl;
+#endif
+
+        // Find the maximum possible value
+        size_t ub_len = range[1].length();
+        if (ub_len < 2)
+        {
+            continue;
+        }
+        u_int64_t max = 10;
+        // Odd number of digits
+        if (ub_len & 0x01)
+        {
+            ub_len = (ub_len - 1) >> 1;
+            for (size_t ii=1; ii<ub_len; ii++)
+            {
+                max *= 10;
+            }
+            max -= 1;
+        }
+        // Even number of digits
+        else
+        {
+            u_int64_t mid = ub_len >> 1;
+            max = std::stoull(range[1].substr(0, mid));
+            u_int64_t v2 = std::stoull(range[1].substr(mid));
+            if (v2 < max) {
+                max--;
+            }
+        }
+
+        // Sum up the values
+        u_int64_t sum = 0;
+        std::set<u_int64_t> used_values;
+        used_values.clear();
+        for (u_int64_t ii=1; ii<=max; ii++) {
+            std::stringstream ss("");
+            while (true) {
+                ss << ii;
+                u_int64_t test_val = std::stoull(ss.str());
+                if (test_val >= full_min && test_val <= full_max) {
+                    if (!used_values.contains(test_val)) {
+                        sum += test_val;
+                        used_values.insert(test_val);
+#ifdef DEBUG
+                        std::cout << test_val << std::endl;
+#endif
+                    }
+                }
+                if (test_val > full_max) {
+                    break;
+                }
+            }
+        }
+        grand_sum += sum;
+    }
+    return grand_sum;
+}
+
 int main(int argc, char **argv) {
     
     // Check inputs
@@ -106,6 +175,9 @@ int main(int argc, char **argv) {
     std::vector<std::array<std::string, 2>> ranges = read_input(argv[1]);
 
     u_int64_t sum = sum_invalid_ids(ranges);
+    u_int64_t sum2 = sum_invalid_ids_2(ranges);
     std::cout << "Sum: " << sum << std::endl;
+    std::cout << "Sum 2: " << sum2 << std::endl;
 
+    return EXIT_SUCCESS;
 }
