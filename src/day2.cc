@@ -21,6 +21,7 @@ std::vector<std::array<std::string, 2>> read_input(const std::string& fname) {
         std::array<std::string, 2> range = {s1, s2};
         ranges.push_back(range);
     }
+    ifile.close();
     return ranges;
 }
 

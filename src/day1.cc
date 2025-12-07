@@ -14,6 +14,7 @@ std::vector<int> read_input(const std::string& fname) {
         int distance = std::stoi(line.substr(1));
         turns.push_back(direction * distance);
     }
+    ifile.close();
     return turns;
 }
 
