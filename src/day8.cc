@@ -40,10 +40,11 @@ double point_distance(const Point3D& p1, const Point3D& p2) {
     );
 }
 
-uint64_t do_n_connections(const std::vector<Point3D>& nodes, const size_t n) {
-    using IndexPair = std::array<size_t, 2>;
-    using DistanceInfo = std::tuple<double, IndexPair>;
-    // Get a list of distances
+using IndexPair = std::array<size_t, 2>;
+using DistanceInfo = std::tuple<double, IndexPair>;
+
+std::vector<DistanceInfo> get_distances(const std::vector<Point3D>& nodes) {
+    // Calculate all the distances
     std::vector<DistanceInfo> distances;
     for (size_t ii=0; ii<nodes.size()-1; ii++) {
         for (size_t jj=(ii+1); jj<nodes.size(); jj++) {
@@ -62,57 +63,56 @@ uint64_t do_n_connections(const std::vector<Point3D>& nodes, const size_t n) {
             return std::get<0>(a) < std::get<0>(b);
         }
     );
+    return distances;
+}
+
+using Circuit = std::unordered_set<size_t>;
+
+void make_connection(IndexPair pair, std::vector<Circuit>& circuits) {
+    std::vector<int> circuit_idxs = {-1, -1};
+    size_t circuit_idx = 0;
+    // Find if the indexs are alread in a circuit
+    for (const Circuit& circuit : circuits) {
+        for (size_t jj=0; jj<2; jj++) {
+            if (circuit_idxs[jj] == -1 && circuit.contains(pair[jj])) {
+                circuit_idxs[jj] = static_cast<int>(circuit_idx);
+            }
+        }
+        if (circuit_idxs[0] >= 0 && circuit_idxs[1] >= 0) {
+            break;
+        }
+        circuit_idx++;
+    }
+    // Put the indexs into the list
+    if (circuit_idxs[0] == -1 && circuit_idxs[1] == -1) {
+        Circuit new_circuit = {pair[0], pair[1]};
+        circuits.push_back(new_circuit);
+    }
+    else if (circuit_idxs[0] == circuit_idxs[1]) {
+        // Do nothing, already connected
+    }
+    else if (circuit_idxs[0] >= 0 && circuit_idxs[1] == -1) {
+        circuits[circuit_idxs[0]].insert(pair[1]);
+    }
+    else if (circuit_idxs[0] == -1 && circuit_idxs[1] >= 0) {
+        circuits[circuit_idxs[1]].insert(pair[0]);
+    }
+    else if (circuit_idxs[0] >= 0 && circuit_idxs[1] >= 0) {
+        circuits[circuit_idxs[0]].insert(
+            circuits[circuit_idxs[1]].begin(),
+            circuits[circuit_idxs[1]].end()
+        );
+        circuits.erase(circuits.begin() + circuit_idxs[1]);
+    }
+}
+
+uint64_t do_n_connections(const std::vector<DistanceInfo>& distances, const size_t n) {
 
     // Loop through the first 'n' distances and make circuits
-    struct Circuit {
-        double wire_length;
-        std::unordered_set<size_t> node_idxs;
-    };
     std::vector<Circuit> circuits;
     for (size_t ii=0; ii<n; ii++) {
-        double pair_dist = std::get<0>(distances[ii]);
         IndexPair pair = std::get<1>(distances[ii]);
-        std::vector<int> circuit_idxs = {-1, -1};
-        size_t circuit_idx = 0;
-        // Find if the indexs are alread in a circuit
-        for (const Circuit& circuit : circuits) {
-            for (size_t jj=0; jj<2; jj++) {
-                //if (circuit_idxs[jj] == -1 && circuit.node_idxs.find(pair[jj]) != circuit.node_idxs.end()) {
-                if (circuit_idxs[jj] == -1 && circuit.node_idxs.contains(pair[jj])) {
-                    circuit_idxs[jj] = static_cast<int>(circuit_idx);
-                }
-            }
-            if (circuit_idxs[0] >= 0 && circuit_idxs[1] >= 0) {
-                break;
-            }
-            circuit_idx++;
-        }
-        // Put the indexs into the list
-        if (circuit_idxs[0] == -1 && circuit_idxs[1] == -1) {
-            Circuit new_circuit = {
-                .wire_length = pair_dist,
-                .node_idxs = {pair[0], pair[1]},
-            };
-            circuits.push_back(new_circuit);
-        }
-        else if (circuit_idxs[0] == circuit_idxs[1]) {
-            // Do nothing, already connected
-        }
-        else if (circuit_idxs[0] >= 0 && circuit_idxs[1] == -1) {
-            circuits[circuit_idxs[0]].node_idxs.insert(pair[1]);
-            circuits[circuit_idxs[0]].wire_length += pair_dist;
-        }
-        else if (circuit_idxs[0] == -1 && circuit_idxs[1] >= 0) {
-            circuits[circuit_idxs[1]].node_idxs.insert(pair[0]);
-            circuits[circuit_idxs[1]].wire_length += pair_dist;
-        }
-        else if (circuit_idxs[0] >= 0 && circuit_idxs[1] >= 0) {
-            circuits[circuit_idxs[0]].node_idxs.insert(
-                circuits[circuit_idxs[1]].node_idxs.begin(),
-                circuits[circuit_idxs[1]].node_idxs.end()
-            );
-            circuits.erase(circuits.begin() + circuit_idxs[1]);
-        }
+        make_connection(pair, circuits);
     }
 
     // Sort the final circuit sizes
@@ -120,16 +120,36 @@ uint64_t do_n_connections(const std::vector<Point3D>& nodes, const size_t n) {
         circuits.begin(),
         circuits.end(),
         [](const Circuit& a, const Circuit& b) {
-            return a.node_idxs.size() > b.node_idxs.size();
+            return a.size() > b.size();
         }
     );
 
     // Calculate the product of the three biggest circuits
     uint64_t product = 1;
     for (size_t ii=0; ii<3; ii++) {
-        product *= circuits[ii].node_idxs.size();
+        product *= circuits[ii].size();
     }
     return product;
+}
+
+uint64_t find_last_connection(const std::vector<Point3D>& junctions, const std::vector<DistanceInfo>& dist_info) {
+    std::unordered_set<size_t> connected_nodes;
+    std::vector<Circuit> circuits;
+    size_t x1 = 0;
+    size_t x2 = 0;
+    for (size_t ii=0; ii<dist_info.size(); ii++) {
+        IndexPair pair = std::get<1>(dist_info[ii]);
+        make_connection(pair, circuits);
+        connected_nodes.insert(
+            pair.begin(), pair.end()
+        );
+        if (connected_nodes.size() >= junctions.size() && circuits.size() == 1) {
+            x1 = junctions[pair[0]][0];
+            x2 = junctions[pair[1]][0];
+            break;
+        }
+    }
+    return x1 * x2;
 }
 
 int main(int argc, char **argv) {
@@ -142,12 +162,15 @@ int main(int argc, char **argv) {
 
     // Read the input file
     std::vector<Point3D> junction_boxes = read_input(argv[1]);
+    std::vector<DistanceInfo> distances = get_distances(junction_boxes);
 
     // Process the inputs
-    uint64_t product = do_n_connections(junction_boxes, 1000);
+    uint64_t product = do_n_connections(distances, 1000);
+    uint64_t wall_distance = find_last_connection(junction_boxes, distances);
 
     // Output the results
     std::cout << "Circuit product: " << product << std::endl;
+    std::cout << "Wall Distance: " << wall_distance << std::endl;
 
     return EXIT_SUCCESS;
 }
