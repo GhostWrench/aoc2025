@@ -1,9 +1,7 @@
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstdint>
 #include <fstream>
-//#include <list>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -11,13 +9,13 @@
 #include <unordered_set>
 #include <vector>
 
-using Point3D = std::array<double, 3>;
+using Point3D = std::array<uint64_t, 3>;
 
 std::vector<Point3D> read_input(const std::string& fname) {
     // Read the file
     std::ifstream ifile(fname);
     std::string line;
-    std::vector<std::array<double, 3>> output;
+    std::vector<std::array<uint64_t, 3>> output;
     while (std::getline(ifile, line)) {
         if (line.empty()) break;
         std::stringstream ss(line);
@@ -32,23 +30,22 @@ std::vector<Point3D> read_input(const std::string& fname) {
     return output;
 }
 
-double point_distance(const Point3D& p1, const Point3D& p2) {
-    return std::sqrt(
-          std::pow(p2[0] - p1[0], 2.0) 
-        + std::pow(p2[1] - p1[1], 2.0) 
-        + std::pow(p2[2] - p1[2], 2.0)
-    );
+uint64_t point_distance(const Point3D& p1, const Point3D& p2) {
+        uint64_t dx = p2[0] - p1[0];
+        uint64_t dy = p2[1] - p1[1];
+        uint64_t dz = p2[2] - p1[2];
+        return dx*dx + dy*dy + dz*dz;
 }
 
 using IndexPair = std::array<size_t, 2>;
-using DistanceInfo = std::tuple<double, IndexPair>;
+using DistanceInfo = std::tuple<uint64_t, IndexPair>;
 
 std::vector<DistanceInfo> get_distances(const std::vector<Point3D>& nodes) {
     // Calculate all the distances
     std::vector<DistanceInfo> distances;
     for (size_t ii=0; ii<nodes.size()-1; ii++) {
         for (size_t jj=(ii+1); jj<nodes.size(); jj++) {
-            double dist = point_distance(nodes[ii], nodes[jj]);
+            uint64_t dist = point_distance(nodes[ii], nodes[jj]);
             DistanceInfo value = {
                 dist, {ii, jj}
             };
