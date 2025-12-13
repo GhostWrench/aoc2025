@@ -6,3 +6,6 @@ output/
 
 # Debug logs
 *.log
+
+# src template
+src/template.cc
