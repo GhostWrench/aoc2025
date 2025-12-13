@@ -23,7 +23,7 @@ std::vector<Point3D> read_input(const std::string& fname) {
         for (size_t ii=0; ii<3; ii++){
             std::string cell;
             std::getline(ss, cell, ',');
-            output[output.size()-1][ii] = std::stod(cell);
+            output[output.size()-1][ii] = std::stoull(cell);
         }
     }
     ifile.close();
