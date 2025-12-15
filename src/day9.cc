@@ -259,9 +259,9 @@ int64_t find_largest_contained_rect(
 
 
         bool trace_ok = true;
+        int64_t x_start = std::min(pt1[0], pt2[0]);
+        int64_t x_end = std::max(pt1[0], pt2[0]);
         for (auto tp=tp_begin; tp!=tp_end; tp++) {
-            int64_t x_start = std::min(pt1[0], pt2[0]);
-            int64_t x_end = std::max(pt1[0], pt2[0]);
             trace_ok = trace_ray(*tp, x_start, x_end, vseg_select);
             if (!trace_ok) break;
         }
