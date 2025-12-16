@@ -15,3 +15,4 @@ This repo has my attempts at AOC for 2025. Fee free to look through the code and
 | 7   | :star: | :star: | 0m0.004s |
 | 8   | :star: | :star: | 0m0.403s |
 | 9   | :star: | :star: | 0m1.609s |
+| 10  | :star: |        |          |
