@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <sstream>
@@ -132,165 +133,229 @@ size_t count_joltage_presses(const MachineInfo& machine) {
     disp_matrix(system);
 #endif
 
-    // Find the pivot rows and do row reduction
-    std::vector<int> button_pivots;
-    size_t pivot_search_col = 0;
-    size_t matrix_rank = 0;
-    while (pivot_search_col < n) {
-        int pivot_row = -1;
-        for (size_t ii=0; ii<m; ii++) {
-            // Skip if alread a pivot row
-            auto it = std::find(button_pivots.begin(), button_pivots.end(), ii);
-            if (it != button_pivots.end())
-            {
-                continue;
-            }
-            if (system[ii][pivot_search_col] != 0) {
-                // Pivot found
-                pivot_row = ii;
-                // Ensure the row is positive
-                //if (system[ii][pivot_search_col] < 0) {
-                //    for (size_t jjj=0; jjj<n; jjj++) {
-                //        system[ii][jjj] *= -1;
-                //    }
-                //}
-                // Do row reduction on all other rows
-                // Find the lowest common multiple, the pivot row and operation row scaler.
-                for (size_t iii=0; iii<m; iii++) {
-                    // Skip rows that already have 0 in the pivot column
-                    if (system[iii][pivot_search_col] == 0) continue;
-                    // Skip current pivot row
-                    if (ii == iii) continue;
-                    // Skip other existing pivot rows
-                    auto it = std::find(button_pivots.begin(), button_pivots.end(), iii);
-                    if (it != button_pivots.end()) continue;
-                    // Find the least common multiple and the value to scale each row by
-                    int lcm = std::lcm(system[ii][pivot_search_col], system[iii][pivot_search_col]);
-                    int pivot_scale = lcm / system[ii][pivot_search_col];
-                    int row_scale = lcm / system[iii][pivot_search_col];
-                    // Scale the op row
-                    for (size_t jjj=0; jjj<n+1; jjj++) {
-                        system[iii][jjj] *= row_scale;
-                    }
-                    // Subtract the pivot row
-                    for (size_t jjj=0; jjj<n+1; jjj++) {
-                        system[iii][jjj] -= system[ii][jjj] * pivot_scale;
-                    }
-                }
-#ifdef DEBUG
-                disp_matrix(system);
-#endif
-                matrix_rank++;
-                break;
-            }
-        }
-        // If we get here a pivot wasn't found
-        button_pivots.push_back(pivot_row);
-        pivot_search_col++;
-    }
-
-#ifdef DEBUG
-    disp_matrix(system);
-    std::cout << "\n" << "Pivots: {";
-    for (size_t ii=0; ii<button_pivots.size(); ii++) {
-        std::cout << button_pivots[ii] << ",";
-    }
-    std::cout << "}" << "\n";
-    std::cout << std::endl;
-#endif
-
-    // Attempt to limit the range of of the searches by looking for purely 
-    // positive rows or rows with a single value
-    int max_range = 0;
-    for (size_t ii=0; ii<machine.joltage_requirements.size(); ii++) {
-        max_range += machine.joltage_requirements[ii];
-    }
-    using SearchRange = std::array<int, 2>;
-    std::vector<SearchRange> search_ranges;
-    search_ranges.reserve(n);
+    // Create a vector with information about the vectors
+    enum class PivotType {
+        INDEPENDENT,
+        DEPENDENT,
+        COUNT,
+    };
+    struct DependentEq {
+        int base;
+        int scale;
+        std::vector<int> coeffs;
+    };
+    struct Variable {
+        std::array<int, 2> range;
+        PivotType pivot_type;
+        int pivot_row;
+        bool solved;
+        DependentEq eq;
+    };
+    std::vector<Variable> variables;
     for (size_t ii=0; ii<n; ii++) {
-        SearchRange range = {-1, max_range};
-        search_ranges.push_back(range);
+        Variable variable = {
+            .range = {-1, std::numeric_limits<int>::max()},
+            .pivot_type = PivotType::INDEPENDENT,
+            .pivot_row = -1,
+            .solved = false,
+            .eq {
+                .base = 0,
+                .scale = 0,
+                .coeffs = {}
+            }
+        };
+        variables.push_back(variable);
     }
-    // Look for easy ranges to determine in all positive rows and single value 
-    // rows
-    for (size_t ii=0; ii<m; ii++) {
-        int non_zero_count = 0;
-        size_t non_zero_index = 0;
-        bool all_positive = true;
-        for (size_t jj=0; jj<n; jj++) {
-            if (system[ii][jj] < 0) {
-                all_positive = false;
-            }
-            if (system[ii][jj] != 0) {
-                non_zero_count += 1;
-                non_zero_index = jj;
-            }
-        }
-        if (non_zero_count == 1) {
-            int value = system[ii][n] / system[ii][non_zero_index];
-            if (value > search_ranges[non_zero_index][0]) {
-                search_ranges[non_zero_index][0] = value;
-            }
-            if (value < search_ranges[non_zero_index][1]) {
-                search_ranges[non_zero_index][1] = value;
-            }
-        }
-        else if (all_positive && non_zero_count > 0) {
-            for (size_t jj=0; jj<n; jj++) {
-                // Skip non-pivot rows
-                if (system[ii][jj] == 0) continue;
-                int new_range = system[ii][n] / system[ii][jj];
-                if (new_range < search_ranges[jj][1]) {
-                    search_ranges[jj][1] = new_range;
+
+    // Find the pivot rows and do row reduction
+    std::unordered_set<int> independent_pivot_rows;
+    //size_t matrix_rank = 0;
+    for (size_t pivot_search_col=0; pivot_search_col<n; pivot_search_col++) {
+        //int pivot_row = -1;
+        //for (PivotType pivot_type=PivotType::INDEPENDENT; pivot_type<PivotType::COUNT; pivot_type++) {
+        for (PivotType pivot_type : {PivotType::INDEPENDENT, PivotType::DEPENDENT}) {
+            for (size_t ii=0; ii<m; ii++) {
+                if (pivot_type == PivotType::INDEPENDENT && independent_pivot_rows.contains(ii)) {
+                    // When looking for independent pivots, skip ones that have already been found
+                    continue;
                 }
-                if (0 > search_ranges[jj][0]) {
-                    search_ranges[jj][0] = 0;
+                if (system[ii][pivot_search_col] != 0) {
+                    // Pivot Found, perform row reduction
+                    variables[pivot_search_col].pivot_row = ii;
+                    variables[pivot_search_col].pivot_type = pivot_type;
+                    // Find the lowest common multiple, the pivot row and operation row scaler.
+                    for (size_t iii=0; iii<m; iii++) {
+                        // Skip rows that already have 0 in the pivot column
+                        if (system[iii][pivot_search_col] == 0) continue;
+                        // Skip current pivot row
+                        if (ii == iii) continue;
+                        // Skip other existing pivot rows
+                        if (pivot_type == PivotType::INDEPENDENT && independent_pivot_rows.contains(iii)) {
+                            continue;
+                        }
+                        // Find the least common multiple and the value to scale each row by
+                        int lcm = std::lcm(system[ii][pivot_search_col], system[iii][pivot_search_col]);
+                        int pivot_scale = lcm / system[ii][pivot_search_col];
+                        int row_scale = lcm / system[iii][pivot_search_col];
+                        // Scale the op row
+                        for (size_t jjj=0; jjj<n+1; jjj++) {
+                            system[iii][jjj] *= row_scale;
+                        }
+                        // Subtract the pivot row
+                        for (size_t jjj=0; jjj<n+1; jjj++) {
+                            system[iii][jjj] -= system[ii][jjj] * pivot_scale;
+                        }
+                        // If the last column is negative, multiply the row by -1
+                        if (system[iii][n] < 0) {
+                            for (size_t jjj=0; jjj<n+1; jjj++) {
+                                system[iii][jjj] *= -1;
+                            }
+                        }
+                    }
+                    if (pivot_type == PivotType::INDEPENDENT) {
+                        independent_pivot_rows.insert(ii);
+                    }
+#ifdef DEBUG
+                    disp_matrix(system);
+#endif
+                    // break out of two top two loops
+                    goto next_col;
+                }
+            }
+        }
+next_col:
+    }
+
+    // Create an equation for all of the dependent variables
+    for (size_t jj=0; jj<n; jj++) {
+        if (variables[jj].pivot_type == PivotType::DEPENDENT) {
+            variables[jj].eq.base = system[variables[jj].pivot_row][n];
+            variables[jj].eq.scale = system[variables[jj].pivot_row][jj];
+            for (size_t jjj=0; jjj<n; jjj++) {
+                if (jjj == jj) {
+                    variables[jj].eq.coeffs.push_back(0);
+                }
+                else {
+                    variables[jj].eq.coeffs.push_back(-system[variables[jj].pivot_row][jjj]);
                 }
             }
         }
     }
 
-    // Now loop through and attempt to find places where only one range is 
-    // undefined
-    bool ranges_updated;
-    do {
+    // Find the maximum range for each variable
+    bool ranges_updated = true;
+    while (ranges_updated) {
         ranges_updated = false;
         for (size_t ii=0; ii<m; ii++) {
-            int undefined_count = 0;
-            size_t undefined_index = 0;
+            int non_zero_count = 0;
+            size_t non_zero_idx = 0;
+            int undefined_range_count = 0;
+            size_t undefined_range_idx = 0;
+            bool all_positive = true;
             for (size_t jj=0; jj<n; jj++) {
-                if (system[ii][jj] != 0 && search_ranges[jj][0] == -1) {
-                    undefined_count++;
-                    undefined_index = jj;
+                if (system[ii][jj] != 0) {
+                    non_zero_count++;
+                    non_zero_idx = jj;
+                    if (variables[jj].range[0] == -1) {
+                        undefined_range_count++;
+                        undefined_range_idx = jj;
+                    }
+                }
+                if (system[ii][jj] < 0) {
+                    all_positive = false;
                 }
             }
-            if (undefined_count == 1) {
-                search_ranges[undefined_index][0] = 0;
-                search_ranges[undefined_index][1] = system[ii][n];
+            if (non_zero_count == 1 && !variables[non_zero_idx].solved) {
+                // Best case, variable can be solved
+                int value = system[ii][n] / system[ii][non_zero_idx];
+                variables[non_zero_idx].range = {value, value};
+                variables[non_zero_idx].solved = true;
+                ranges_updated = true;
+            }
+            else if (undefined_range_count == 1 && !variables[undefined_range_idx].solved) {
+                // Second best case, a range can be solved for
+                std::array<int, 2> new_range({system[ii][n], system[ii][n]});
+                int scale = system[ii][undefined_range_idx];
                 for (size_t jj=0; jj<n; jj++) {
-                    if (jj == undefined_index) continue;
-                    if (system[ii][jj] == 0) continue;
-                    if (system[ii][jj] > 0) {
-                        search_ranges[undefined_index][0] += (system[ii][jj] * search_ranges[jj][0]);
+                    if (jj == undefined_range_idx) continue;
+                    int value = system[ii][jj];
+                    if (value == 0) continue;
+                    std::array<int, 2> range = variables[jj].range;
+                    if (value > 0) {
+                        new_range[0] -= value * range[1];
+                        new_range[1] -= value * range[0];
                     }
                     else
                     {
-                        search_ranges[undefined_index][1] -= (system[ii][jj] * search_ranges[jj][1]);
+                        new_range[0] -= value * range[0];
+                        new_range[1] -= value * range[1];
                     }
                 }
-                ranges_updated = true;
+                new_range[0] = new_range[0] / scale;
+                new_range[1] = new_range[1] / scale;
+                if (new_range[0] < 0) {
+                    new_range[0] = 0;
+                }
+                if (new_range[0] > variables[undefined_range_idx].range[0]) {
+                    variables[undefined_range_idx].range[0] = new_range[0];
+                    ranges_updated = true;
+                }
+                if (new_range[1] < variables[undefined_range_idx].range[1]) {
+                    variables[undefined_range_idx].range[1] = new_range[1];
+                    ranges_updated = true;
+                }
+                if (variables[undefined_range_idx].range[0] == variables[undefined_range_idx].range[1]) {
+                    variables[undefined_range_idx].solved = true;
+                }
+            }
+            else if (all_positive) {
+                // Last case, can infer a broad range from last value
+                for (size_t jj=0; jj<n; jj++) {
+                    if (variables[jj].solved) continue;
+                    int value = system[ii][jj];
+                    if (value == 0) continue;
+                    if (0 > variables[jj].range[0]) {
+                        variables[jj].range[0] = 0;
+                        ranges_updated = true;
+                    }
+                    int max = system[ii][n] / value;
+                    if (max < variables[jj].range[1]) {
+                        variables[jj].range[1] = max;
+                        ranges_updated = true;
+                    }
+                }
             }
         }
-    } while (ranges_updated);
-
-#ifdef DEBUG
-    std::cout << "Input ranges: " << "\n";
-    for (size_t ii=0; ii<button_pivots.size(); ii++) {
-        std::cout << "b" << ii << " [" << search_ranges[ii][0] << "," << search_ranges[ii][1] << "]\n";
     }
-    std::cout << "\n" << std::endl;
-#endif 
+
+//#ifdef DEBUG
+    disp_matrix(system);
+    std::cout << "\n" << "Variables:\n";
+    for (size_t ii=0; ii<variables.size(); ii++) {
+        std::cout << ii << ": ";
+        if (variables[ii].pivot_type == PivotType::INDEPENDENT) {
+            std::cout << "[" << variables[ii].range[0] << "," << variables[ii].range[1] << "]" << "\n";
+        }
+        else {
+            std::cout << "( " << variables[ii].eq.base << " ";
+            for (size_t vi=0; vi<variables[ii].eq.coeffs.size(); vi++) {
+                int coeff = variables[ii].eq.coeffs[vi];
+                if (coeff == 0) {
+                    continue;
+                } 
+                else if (coeff > 0) {
+                    std::cout << " + " << coeff << "x" << vi;
+                }
+                else {
+                    std::cout << " - " << -coeff << "x" << vi;
+                }
+            }
+            std::cout << " ) / " << variables[ii].eq.scale << "\n";
+        }
+    }
+    std::cout << "\n";
+    std::cout << std::endl;
+//#endif
 
     return 0;
 }
