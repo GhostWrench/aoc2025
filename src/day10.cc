@@ -190,9 +190,9 @@ size_t count_joltage_presses(const MachineInfo& machine) {
                         // Skip current pivot row
                         if (ii == iii) continue;
                         // Skip other existing pivot rows
-                        if (pivot_type == PivotType::INDEPENDENT && independent_pivot_rows.contains(iii)) {
-                            continue;
-                        }
+                        //if (pivot_type == PivotType::INDEPENDENT && independent_pivot_rows.contains(iii)) {
+                        //    continue;
+                        //}
                         // Find the least common multiple and the value to scale each row by
                         int lcm = std::lcm(system[ii][pivot_search_col], system[iii][pivot_search_col]);
                         int pivot_scale = lcm / system[ii][pivot_search_col];
@@ -328,7 +328,7 @@ next_col:
         }
     }
 
-//#ifdef DEBUG
+#ifdef DEBUG
     disp_matrix(system);
     std::cout << "\n" << "Variables:\n";
     for (size_t ii=0; ii<variables.size(); ii++) {
@@ -355,15 +355,126 @@ next_col:
     }
     std::cout << "\n";
     std::cout << std::endl;
-//#endif
+#endif
 
-    return 0;
+    // Loop through the possible variables and check if they are a solution
+    struct IterCounter {
+        size_t var_idx;
+        size_t count;
+    };
+    std::vector<IterCounter> iter_count;
+    for (size_t jj=0; jj<n; jj++) {
+        if (variables[jj].pivot_type == PivotType::INDEPENDENT) {
+            IterCounter ic = {
+                .var_idx = jj,
+                .count = static_cast<size_t>(variables[jj].range[0]),
+            };
+            iter_count.push_back(ic);
+        }
+    }
+    bool iter_done = false;
+    int min_presses = std::numeric_limits<int>::max();
+    while (!iter_done) {
+        std::vector<int> guess(n, 0);
+        // Iterate through indepent variables and assign a value from the range
+        for (size_t ci=0; ci<iter_count.size(); ci++) {
+            guess[iter_count[ci].var_idx] = iter_count[ci].count;
+        }
+        // Calculate the dependent variables
+        bool positive_guess = true;
+        for (size_t vi=0; vi<variables.size(); vi++) {
+            if (variables[vi].pivot_type == PivotType::DEPENDENT) {
+                int value = variables[vi].eq.base;
+                for (size_t vii=0; vii<variables[vi].eq.coeffs.size(); vii++) {
+                    value += guess[vii] * variables[vi].eq.coeffs[vii];
+                }
+                value /= variables[vi].eq.scale;
+                if (value < 0) positive_guess = false;
+                guess[vi] = value;
+            }
+        }
+
+#ifdef DEBUG
+        std::cout << "[";
+        for (size_t vi=0; vi<guess.size(); vi++) {
+            std::cout << guess[vi] << ",";
+        }
+        std::cout << "] => ";
+#endif
+
+        // Check if the guess works
+        std::vector<int> result;
+        for (size_t ii=0; ii<m; ii++) {
+            int row_total = 0;
+            for (size_t jj=0; jj<n; jj++) {
+                row_total += guess[jj] * system[ii][jj];
+            }
+            if (row_total < 0) positive_guess = false;
+            result.push_back(row_total);
+        }
+
+#ifdef DEBUG
+        std::cout << "[";
+        for (size_t vi=0; vi<result.size(); vi++) {
+            std::cout << result[vi] << ",";
+        }
+        std::cout << "] ";
+#endif
+
+        bool is_equal = true;
+        int sum = 0;
+        for (size_t jj=0; jj<n; jj++) {
+            sum += guess[jj];
+        }
+        for (size_t ii=0; ii<m; ii++) {
+            if (result[ii] != system[ii][n]) {
+                is_equal = false;
+                break;
+            }
+        }
+
+#ifdef DEBUG
+        if (is_equal && positive_guess) {
+            std::cout << "X (" << sum << " presses)";
+        }
+        std::cout << std::endl;
+#endif
+
+        if (is_equal && positive_guess && sum < min_presses) {
+            min_presses = sum;
+        }
+
+        // Update the iteration
+        bool carry = true;
+        size_t iter_idx = 0;
+        while (carry) {
+            int count = static_cast<int>(iter_count[iter_idx].count);
+            if (count >= variables[iter_count[iter_idx].var_idx].range[1]) {
+                iter_count[iter_idx].count = variables[iter_count[iter_idx].var_idx].range[0];
+                carry = true;
+                iter_idx++;
+                if (iter_idx >= iter_count.size()) {
+                    iter_done = true;
+                    break;
+                }
+            }
+            else {
+                carry = false;
+                iter_count[iter_idx].count++;
+            }
+        }
+    }
+
+    return min_presses;
 }
 
 size_t count_all_joltage_presses(const std::vector<MachineInfo>& machines) {
     size_t total = 0;
+    size_t count = 0;
     for (const MachineInfo& machine : machines) {
         total += count_joltage_presses(machine);
+        std::cout << count << ": " << total << std::endl;
+        count++;
     }
     return total;
 }
