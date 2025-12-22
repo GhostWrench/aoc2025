@@ -1,6 +1,7 @@
 # Advent of Code 2025
 
-This repo has my attempts at AOC for 2025. Fee free to look through the code and send me any critiques or comments.
+This repo has my attempts at AOC for 2025. It is entirely in C++ without the use
+of any libraries other than the standard library.
 
 ## Results
 
