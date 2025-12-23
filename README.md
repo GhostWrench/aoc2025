@@ -17,3 +17,4 @@ of any libraries other than the standard library.
 | 8   | :star: | :star: | 0m0.403s |
 | 9   | :star: | :star: | 0m1.609s |
 | 10  | :star: | :star: | 0m0.124s |
+| 11  | :star: |        |          |
