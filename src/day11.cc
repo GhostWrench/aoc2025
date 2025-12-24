@@ -36,43 +36,43 @@ std::unordered_map<std::string, Device> read_input(const std::string& fname) {
 size_t count_paths(
     const std::unordered_map<std::string, Device>& devices,
     const std::string& start = "you",
+    const std::string& end = "out",
     const std::unordered_set<std::string>& pass_thru = {},
-    std::unordered_map<std::string, size_t>* cache = nullptr,
-    const std::unordered_set<std::string>& path = {}
+    std::unordered_map<std::string, size_t>* cache = nullptr
 ) {
+    std::stringstream cache_key;
+    cache_key << start;
+    for (const std::string& pt : pass_thru) {
+        cache_key << pt;
+    }
     bool do_free = false;
     if (cache == nullptr) {
         do_free = true;
         cache = new std::unordered_map<std::string, size_t>;
     }
-    if (cache->contains(start)) {
-        return cache->at(start);
+    if (cache->contains(cache_key.str())) {
+        return cache->at(cache_key.str());
     }
     size_t path_count = 0;
     const Device& device = devices.at(start);
     for (const std::string& output : device.outputs) {
-        if (output == "out" && pass_thru.empty()) {
+        if (output == end && pass_thru.empty()) {
             path_count++;
         }
-        else if (output == "out") {
-            continue;
-        }
-        else if (path.contains(output)) {
+        else if (output == end) {
             continue;
         }
         else {
-            std::unordered_set<std::string> path_update = path;
-            path_update.insert(output);
             std::unordered_set<std::string> pass_thru_update = pass_thru;
             pass_thru_update.erase(start);
-            path_count += count_paths(devices, output, pass_thru, cache, path_update);
+            path_count += count_paths(devices, output, end, pass_thru_update, cache);
         }
     }
     if (do_free) {
         delete cache;
     }
     else {
-        cache->insert(std::make_pair(start, path_count));
+        cache->insert(std::make_pair(cache_key.str(), path_count));
     }
     return path_count;
 }
@@ -87,13 +87,10 @@ int main(int argc, char **argv) {
 
     // Read the input file
     std::unordered_map<std::string, Device> devices = read_input(argv[1]);
-    //std::unordered_map<std::string, Device> devices2 = read_input("data/day11/example2.dat");
 
     // Process the inputs
     size_t num_paths = count_paths(devices, "you");
-    //size_t svr_paths = count_paths(devices2, "svr", {"dac","fft"});
-    //size_t svr_paths = count_paths(devices, "svr");
-    size_t svr_paths = count_paths(devices, "svr", {"dac", "fft"});
+    size_t svr_paths = count_paths(devices, "svr", "out", {"dac", "fft"});
 
     // Output the results
     std::cout << "All paths: " << num_paths << std::endl;
