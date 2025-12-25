@@ -8,7 +8,7 @@ const size_t NUM_SHAPES = 6;
 
 struct Present {
     std::array<std::array<char, 3>, 3> shape;
-    int volume;
+    int area;
 };
 
 struct Region {
@@ -30,12 +30,12 @@ Input read_input(const std::string& fname) {
     for (size_t present_idx=0; present_idx<NUM_SHAPES; present_idx++) {
         std::getline(ifile, line);
         Present present;
-        present.volume = 0;
+        present.area = 0;
         for (size_t row=0; row<3; row++) {
             std::getline(ifile, line);
             for (size_t col=0; col<3; col++) {
                 if (line[col] == '#') {
-                    present.volume++;
+                    present.area++;
                 }
                 present.shape[row][col] = line[col];
             }
@@ -63,13 +63,29 @@ Input read_input(const std::string& fname) {
     return input;
 }
 
-/*
-bool presents_fit_in_region(const Input& input) {
-
-    for ()
-
+int presents_fit_in_region(const Input& input) {
+    int num_fit = 0;
+    for (const Region& region : input.regions) {
+        int region_area = region.width * region.height;
+        int present_area = 0;
+        int total_presents = 0;
+        for (size_t pidx=0; pidx<input.presents.size(); pidx++) {
+            present_area += region.presents[pidx] * input.presents[pidx].area;
+            total_presents += region.presents[pidx];
+        }
+        //std::cout << "Presents: " << present_area << " Region: " << region_area << std::endl;
+        if (present_area > region_area) {
+            continue;
+        }
+        int min_presents = (region.width / 3) * (region.height / 3);
+        //std::cout << "Min Fit: " << min_presents << " Num: " << total_presents << std::endl;
+        if (total_presents <= min_presents) {
+            num_fit++;
+            continue;
+        }
+    }
+    return num_fit;
 }
-*/
 
 int main(int argc, char **argv) {
 
@@ -83,12 +99,10 @@ int main(int argc, char **argv) {
     Input input = read_input(argv[1]);
 
     // Process the inputs
-    //int result1 = get_result1(data);
-    //int result2 = get_result2(data);
+    int presents_fit = presents_fit_in_region(input);
 
     // Output the results
-    std::cout << "Input Regions: " << input.regions.size() << std::endl;
-    //std::cout << "Result 2: " << result2 << std::endl;
+    std::cout << "Presents that fit: " << presents_fit << std::endl;
 
     return EXIT_SUCCESS;
 }
